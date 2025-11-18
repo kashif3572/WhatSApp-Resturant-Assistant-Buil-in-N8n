@@ -29,5 +29,5 @@ REPLACE_SHEET_ID
 
 ## ⚠️ Important
 This workflow **will not run** until you add back your own credentials.  
-It is safe to upload publicly on GitHub.
+
 
