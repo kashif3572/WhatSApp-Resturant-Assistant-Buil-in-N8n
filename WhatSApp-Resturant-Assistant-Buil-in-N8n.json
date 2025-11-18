@@ -1,0 +1,515 @@
+{
+  "name": "Whats app Resturant Assisstant Fully Working",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messages[0].text.body }}",
+        "options": {
+          "systemMessage": "You are the restaurant assistant for Al\u2011Khair Food Restaurant.\nYou have access to three Google Sheet tools:\n- FAQSheet \u2192 read-only (columns: Question, Answer)\n- MenuSheet \u2192 read-only (columns: Item Name, Price, Category)\n- OrdersAppend \u2192 append-only (columns: Order ID (Auto), Customer Name, WhatsApp No., Item Name, Quantity, Price, Total, Date, Time, Status)\n\nGeneral rules:\n- Always use ONLY data from these sheets. Do not invent items, prices, policies, or answers.\n- Understand and respond in English and Urdu. Treat Urdu transliteration (e.g., \u201ckrahi\u201d, \u201cbaryani\u201d, \u201cdilivery\u201d) as typos and match to closest valid item/FAQ.\n- Use the normalized_text input (lowercase, trimmed, punctuation removed) for all matching.\n- Always do fuzzy, typo-tolerant matching (e.g., 'krahi' \u2192 'Karahi', 'baryani' \u2192 'Biryani').\n- Be short, friendly, and clear.\n\n1) Greetings\n- If the user greets (hi/hello/hey/asalam alaikum/greetings/good morning/evening):\n  Reply: \u201cWelcome to Al-Khair Food Restaurant! \ud83c\udf7d\ufe0f How can I assist you today? You can ask about our menu, place an order, or get information about our services.\u201d\n\n2) FAQ handling\n- When a user asks a general question:\n  \u2022 Use the 'Get row(s) in sheet in Google Sheets' tool to fetch **all rows** from FAQSheet.\n  \u2022 Compare the user's normalized_text with each Question:\n      \u2013 Case-insensitive\n      \u2013 Ignore minor typos (e.g., \"dilivery\" \u2192 \"delivery\")\n      \u2013 Allow synonyms (e.g., \"delivery\", \"home delivery\", \"takeaway\")\n  \u2022 Select the closest matching Question.\n  \u2022 If a match is found \u2192 reply with its Answer text naturally.\n  \u2022 If no match is found \u2192 reply: \"I\u2019m sorry, I don\u2019t have that information right now. Would you like to see our menu or place an order?\"\n- Never invent answers that are not present in FAQSheet.\n\n3) Menu handling\nA. Full menu:\n- If the user asks for the menu (e.g., \u201cmenu\u201d, \u201cshow me menu\u201d, \u201ckya menu hai\u201d, \u201ccomplete menu\u201d):\n  \u2022 Fetch ALL rows from MenuSheet.\n  \u2022 Display EVERY item as: [Item Name] \u2013 [Price] PKR \u2013 [Category]\n  \u2022 End with: \u201cEstimated delivery: 30\u201345 minutes.\u201d\n  \u2022 Do not truncate or stop after the first item.\n\nB. Specific item queries:\n- If the user asks for an item or price (e.g., \u201cdo you have pizza\u201d, \u201cprice of zinger\u201d, \u201cmutton krahi\u201d):\n  \u2022 Find the closest matching item in MenuSheet using normalized_text.\n  \u2022 If found \u2192 reply: [Validated Item Name] \u2013 [Price] PKR \u2013 [Category]\n  \u2022 If not found \u2192 reply: \u201cSorry, we don\u2019t have \u2018[user text]\u2019 in our menu. Popular items: Chicken Biryani, Veg Pizza, Mutton Karahi.\u201d\n- Never invent items not in MenuSheet.\n\n4) Recommendations\n- If asked for recommendations (best/popular/chef specials/what do you recommend):\n  \u2022 Pick 3\u20134 items from MenuSheet (case-insensitive, dynamic).\n  \u2022 Reply:\n    Here are some popular options:\n    1. [Item Name] \u2013 [Price] PKR\n    2. [Item Name] \u2013 [Price] PKR\n    3. [Item Name] \u2013 [Price] PKR\n    4. [Item Name] \u2013 [Price] PKR\n  \u2022 End: \u201cEstimated delivery: 20\u201325 minutes.\u201d\n\n5) Order mode (multi-item support, strict validation)\n- Enter ORDER MODE if the user says: \u201corder / place order / put order / book order / mujhe order karna hai\u201d.\n- While in ORDER MODE, do NOT send greetings or FAQ replies.\n- Parse **all items and quantities mentioned in the message** at once:\n  \u2022 Accept numbers or words (e.g., \u201c2\u201d, \u201cone\u201d, \u201cek\u201d).\n  \u2022 Validate each item against MenuSheet (case-insensitive, typo-tolerant).\n  \u2022 If an item is invalid \u2192 reply: \u201cSorry, we don\u2019t have \u2018[user text]\u2019. Available items: [list 3\u20135 items from MenuSheet].\u201d\n  \u2022 If quantity missing for any valid item \u2192 ask explicitly.\n- Detect **Customer Name** if missing and ask once.\n- Detect **WhatsApp Number** WhatsApp Number:\n- If user message contains a valid mobile number (10\u201313 digits, e.g., 03xxxxxxxxx, 923xxxxxxxxx, +923xxxxxxxxx), use that number.\n- Otherwise, if user says \u201cuse my WhatsApp number\u201d or no number provided, use webhook number: {{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}.\n- Once detected, do not ask again..\n\n- Once all fields (Customer Name, WhatsApp Number, Items + Quantities) are ready:\n  \u2022 Fetch Price for each item from MenuSheet.\n  \u2022 Compute Total = sum(Price \u00d7 Quantity for all items).\n  \u2022 Prepare order for OrdersAppend sheet:\n    \u2013 Order ID: leave blank (system auto-generates)\n    \u2013 Customer Name\n    \u2013 WhatsApp No.\n    \u2013 Item Names (validated)\n    \u2013 Quantities (numeric)\n    \u2013 Price (from sheet)\n    \u2013 Total (computed)\n    \u2013 Date (DD-MM-YYYY)\n    \u2013 Time (HH:MM AM/PM)\n    \u2013 Status: Pending\n- Respond in **one message only**:\n  \u201cThank you, [Customer Name]! Your order: [Quantity \u00d7 Item Name, \u2026] has been placed. Your bill is [Total] PKR. Estimated delivery: 30\u201345 minutes.\u201d\n- Never place orders for invalid items.\n- Never re-ask for WhatsApp Number or Customer Name once detected.\n\n6) Fallbacks\n- If user asks outside menu/orders/FAQ:\n  Reply: \u201cI\u2019m here to help with our menu, orders, or restaurant information. How can I assist you today?\u201d\n- If lacking data:\n  Reply: \u201cI\u2019m sorry, I don\u2019t have that information right now. Would you like to see our menu or place an order?\u201d\n\n7) Style & integrity\n- Be friendly, concise, human-like.\n- Handle Urdu/English, case differences, minor typos.\n- Never invent items or policies; always rely on sheets.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -240,
+        112
+      ],
+      "id": "3f9c8423-9531-4c3e-bce8-fb564781e4ba",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "=sessionKey = {{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "contextWindowLength": 20
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -192,
+        320
+      ],
+      "id": "93ac63f6-40d5-46b0-90f7-3d523003bb23",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "messages"
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.whatsAppTrigger",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        112
+      ],
+      "id": "28b989fc-aa06-4a2d-96a5-b4cf85e40593",
+      "name": "WhatsApp Trigger",
+      "webhookId": "REPLACE_VALUE",
+      "credentials": "ADD_YOUR_CREDENTIALS_HERE"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "REPLACE_VALUE",
+        "recipientPhoneNumber": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+        "textBody": "={{ $('AI Agent').item.json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        208
+      ],
+      "id": "cb0aa597-d6f9-4adc-967e-010382de9e95",
+      "name": "Send message",
+      "webhookId": "REPLACE_VALUE",
+      "credentials": "ADD_YOUR_CREDENTIALS_HERE"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -368,
+        336
+      ],
+      "id": "b5e6ccda-6e4b-4b14-9853-35fd7a8f9416",
+      "name": "OpenAI Chat Model",
+      "credentials": "ADD_YOUR_CREDENTIALS_HERE"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Whatsapp agent hotel management for n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Tom99PKcwGtB7H-DCZ85cy2KguIbqMsw3sWojGuy_hY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "REPLACE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "FAQSheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Tom99PKcwGtB7H-DCZ85cy2KguIbqMsw3sWojGuy_hY/edit#gid=460324505"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -48,
+        320
+      ],
+      "id": "32950ab9-9fae-424b-9c8a-5f0b1aa5726c",
+      "name": "GET FAQ",
+      "credentials": "ADD_YOUR_CREDENTIALS_HERE"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Whatsapp agent hotel management for n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Tom99PKcwGtB7H-DCZ85cy2KguIbqMsw3sWojGuy_hY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "REPLACE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "MenuSheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Tom99PKcwGtB7H-DCZ85cy2KguIbqMsw3sWojGuy_hY/edit#gid=555651866"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        96,
+        320
+      ],
+      "id": "77047c00-b37e-478b-a645-727784a3567c",
+      "name": "GET Menu",
+      "credentials": "ADD_YOUR_CREDENTIALS_HERE"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Whatsapp agent hotel management for n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Tom99PKcwGtB7H-DCZ85cy2KguIbqMsw3sWojGuy_hY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "REPLACE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "OrdersAppend",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Tom99PKcwGtB7H-DCZ85cy2KguIbqMsw3sWojGuy_hY/edit#gid=1101729684"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Order ID (Auto)": "={{ 'ORD' + $now.toFormat(\"yyyyMMddHHmmss\") }}\n",
+            "Customer Name": "={{ $json.Customer_Name }}",
+            "WhatsApp No.": "={{ $json.WhatsApp_No }}",
+            "Item Name": "={{ $json.Order_Items }}",
+            "Quantity": "={{ $json.Quantity }}",
+            "Total": "={{ $json.Total }}",
+            "Date": "={{ $json.Date }}",
+            "Time": "={{ $json.Time }}",
+            "Status": "={{ $json.Status }}",
+            "Price": "={{ $json.Total }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Order ID (Auto)",
+              "displayName": "Order ID (Auto)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "WhatsApp No.",
+              "displayName": "WhatsApp No.",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Item Name",
+              "displayName": "Item Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Quantity",
+              "displayName": "Quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Price",
+              "displayName": "Price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total",
+              "displayName": "Total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        576,
+        16
+      ],
+      "id": "627f7516-390f-480c-a030-8fe3086ece95",
+      "name": "Append row in sheet",
+      "credentials": "ADD_YOUR_CREDENTIALS_HERE"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a26d2bc3-c33c-461b-ba48-330a09a261b6",
+              "name": "Customer_Name",
+              "value": "={{ $json['output'].match(/Thank you, (.*)! Your order:/)[1] }}",
+              "type": "string"
+            },
+            {
+              "id": "f1c77d2a-f8cc-4139-b6fc-5c4420aee042",
+              "name": "WhatsApp_No",
+              "value": "={{ $('WhatsApp Trigger').item.json.contacts[0].wa_id }}",
+              "type": "string"
+            },
+            {
+              "id": "550b8de1-c481-4f1e-b0c7-3c6421c2746f",
+              "name": "Order_Items",
+              "value": "={{ $json['output'].match(/Your order: (.*) has been placed/)[1] }}",
+              "type": "string"
+            },
+            {
+              "id": "53acf44d-b76c-4f40-b166-73d21a8105de",
+              "name": "Total",
+              "value": "={{ $json['output'].match(/Your bill is ([0-9]+) PKR/)[1] }}",
+              "type": "string"
+            },
+            {
+              "id": "d59826f5-2b8f-493e-9444-17c02d372d92",
+              "name": "Date",
+              "value": "={{ new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Karachi' }) }}\n",
+              "type": "string"
+            },
+            {
+              "id": "84801694-3945-4f13-b9b4-3aefb6187719",
+              "name": "Time",
+              "value": "={{ new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Karachi' }) }}\n",
+              "type": "string"
+            },
+            {
+              "id": "56bcf3e1-9bd7-4840-9cea-b401fc2fa748",
+              "name": "Status",
+              "value": "Pending",
+              "type": "string"
+            },
+            {
+              "id": "a9a2ab23-1d42-4bb2-b485-da789d01066c",
+              "name": "Quantity",
+              "value": "={{ Number(($json.output || \"\").match(/\\d+/)?.[0] || 1) }}\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        368,
+        16
+      ],
+      "id": "de948f66-71ba-4498-a30c-97b1ae1d1f3f",
+      "name": "Parse order detail"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3884ec25-6e0e-4bf8-856d-13d8996fede4",
+              "leftValue": "={{$json.output}}",
+              "rightValue": "Your order:",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        96
+      ],
+      "id": "cc8f3854-4b41-4ff0-8059-20a9c2ca5669",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET FAQ": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Menu": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message": {
+      "main": [
+        []
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse order detail": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Parse order detail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "timeSavedPerExecution": 0
+  },
+  "versionId": "adb93aba-827d-4ca2-8eeb-0b8834cdc149",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "79839ecc23ba2a22d662258558a60810112b4706229ecb02b65e3b9cc743a7e5"
+  },
+  "id": "7GoAZOcGgTwcOgdY",
+  "tags": []
+}
