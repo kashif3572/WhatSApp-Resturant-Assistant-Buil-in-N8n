@@ -1,20 +1,4 @@
-# Sanitized n8n WhatsApp Restaurant Assistant Workflow
-
-This repository contains a **fully sanitized** n8n workflow for a WhatsApp-based restaurant assistant.
-
-## 🚀 What has been removed for safety
-- API Keys  
-- OAuth credentials  
-- Google Sheets document IDs  
-- WhatsApp phone number IDs  
-- Webhook verification tokens  
-
-All sensitive fields are replaced with:
-```
-ADD_YOUR_CREDENTIALS_HERE
-REPLACE_VALUE
-REPLACE_SHEET_ID
-```
+## WhatsApp Restaurant Assistant Workflow
 
 ## 📌 How to use
 1. Import `sanitized_workflow.json` into your n8n instance.  
