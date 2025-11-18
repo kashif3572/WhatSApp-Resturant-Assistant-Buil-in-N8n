@@ -1,7 +1,7 @@
 ## WhatsApp Restaurant Assistant Workflow
 
 ## 📌 How to use
-1. Import `sanitized_workflow.json` into your n8n instance.  
+1. Import this workflow into your n8n instance.  
 2. Open each credential-based node:
    - WhatsApp Trigger  
    - WhatsApp Send  
